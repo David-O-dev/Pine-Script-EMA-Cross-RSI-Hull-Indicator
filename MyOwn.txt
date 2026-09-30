@@ -1,0 +1,68 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Gradation0
+
+//@version=6
+indicator("My script", overlay=true)
+
+//inputs
+ema_len5 = input.int(5, title="30일 EMA 기간", minval=1)
+ema_len30 = input.int(36, title="30일 EMA 기간", minval=1)
+//RSI
+RSI_len = input.int(7, title = "RSI Length")
+//Hull Suite
+UseHullSuite = input.bool(defval = false, title = "Use Hull Suite", group = "Hull Suite", tooltip = "캔들이 띠 위에서 마감했을 시 롱/숏 표시")
+PlotHullSuite = input.bool(defval = true, title = "Plot Hull Suite", group = "Hull Suite", tooltip = "Show Hull Suite")
+htf = input.timeframe("240", title="Higher timeframe", group = "Hull Suite")
+visualSwitch = input.bool(true, title="Show as a Band?", group = "Hull Suite")
+thicknessSwitch = input.int(1, title="Line Thickness", group = "Hull Suite")
+transpSwitch = input.int(40, title="Band Transparency", step=5, group = "Hull Suite")
+//HMA Inputs
+length = input.int(9, "Length", minval = 2, group = "HMA")
+src = input(close, "Source", group = "HMA")
+
+
+//EMA
+ema30_3 = request.security(syminfo.tickerid, "3", ta.ema(close, ema_len30))
+ema5_3 = request.security(syminfo.tickerid, "3", ta.ema(close, ema_len5))
+
+//RSI
+RSI_3 = request.security(syminfo.tickerid, "1", ta.rsi(close, RSI_len))
+
+//HullSuite
+src1 = close
+string modeSwitch = "Hma"
+int length1 = 55
+float lengthMult = 1.0
+bool useHtf =false
+switchColor = true
+candleCol = false
+hullMovingAverage(_src1, _length1) => ta.wma(2 * ta.wma(_src1, _length1 / 2) - ta.wma(_src1, _length1), math.round(math.sqrt(_length1)))
+expHullMovingAverage(_src1, _length1) => ta.ema(2 * ta.ema(_src1, _length1 / 2) - ta.ema(_src1, _length1), math.round(math.sqrt(_length1)))
+triHullMovingAverage(_src1, _length1) => ta.wma(ta.wma(_src1, _length1 / 3) * 3 - ta.wma(_src1, _length1 / 2) - ta.wma(_src1, _length1), _length1)
+modeSelection(mode, _src1, _len) =>
+    if mode == "Hma"
+        hullMovingAverage(_src1, _len)
+    else if mode == "Ehma"
+        expHullMovingAverage(_src1, _len)
+    else if mode == "Thma"
+        triHullMovingAverage(_src1, _len / 2)
+    else
+        na
+
+_hull = modeSelection(modeSwitch, src1, int(length1 * lengthMult))
+HULL = useHtf ? request.security(syminfo.tickerid, htf, _hull) : _hull
+MHULL =  request.security(syminfo.tickerid, "1", HULL[0])
+SHULL =  request.security(syminfo.tickerid, "1", HULL[2])
+
+//HMA
+hullma = ta.wma(2*ta.wma(src, length/2)-ta.wma(src, length), math.floor(math.sqrt(length)))
+plot(hullma, "HMA", color.red, linewidth = 3)
+
+is_long = ta.crossover(ema5_3, ema30_3) and RSI_3[1] < 70 and RSI_3[2] < 70 and HULL > HULL[2]
+is_short = ta.crossunder(ema5_3, ema30_3) and RSI_3[1] > 24 and RSI_3[2] > 24 and HULL < HULL[2]
+
+if is_long
+    label.new(bar_index, high, text="LONG", style=label.style_label_down, color=color.new(color.lime, 10), textcolor=color.black, size=size.normal)
+
+if is_short
+    label.new(bar_index, high, text="SHORT", style=label.style_label_down, color=color.new(color.red, 10), textcolor=color.white, size=size.normal)
